@@ -14,6 +14,7 @@ export class Chunk {
     this.dirty = true;            // needs (re)meshing?
     this.opaqueMesh = null;       // THREE.Mesh (solid blocks)
     this.waterMesh = null;        // THREE.Mesh (transparent water)
+    this.cutoutMesh = null;       // THREE.Mesh (alpha-tested plants)
   }
 
   static index(x, y, z) {

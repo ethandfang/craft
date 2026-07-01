@@ -8,30 +8,40 @@ export class Input {
     this.canvas = canvas;
     this.overlay = overlay;
     this.keys = new Set();
+    this.buttons = new Set();      // mouse buttons currently held
     this.look = { dx: 0, dy: 0 };  // accumulated mouse delta, consumed each frame
     this.locked = false;
+    this.invOpen = false;  // set by main; suppresses the click-to-play overlay
 
     // Callbacks wired up by main.js.
-    this.onBreak = null;   // ()
-    this.onPlace = null;   // ()
+    this.onPlace = null;   // () — right-click / P edge
     this.onSelect = null;  // (index) — absolute slot
     this.onScroll = null;  // (dir: -1 | +1)
+    this.onGesture = null; // () — first interaction (used to unlock audio)
+    this.onToggleInv = null; // () — E / Esc
 
     this._bind();
   }
 
   key(code) { return this.keys.has(code); }
+  // True while the player is holding left mouse with the pointer locked (mining).
+  isMining() { return this.locked && this.buttons.has(0); }
 
   consumeLook() { const l = this.look; this.look = { dx: 0, dy: 0 }; return l; }
 
   _bind() {
     const { canvas, overlay } = this;
 
-    overlay.addEventListener('click', () => canvas.requestPointerLock());
+    overlay.addEventListener('click', () => {
+      canvas.requestPointerLock();
+      if (this.onGesture) this.onGesture();   // unlock AudioContext on a user gesture
+    });
 
     document.addEventListener('pointerlockchange', () => {
       this.locked = document.pointerLockElement === canvas;
-      overlay.style.display = this.locked ? 'none' : 'flex';
+      // Don't show the "click to play" overlay while the inventory is open.
+      overlay.style.display = (this.locked || this.invOpen) ? 'none' : 'flex';
+      if (!this.locked) this.buttons.clear();
     });
 
     document.addEventListener('mousemove', (e) => {
@@ -43,9 +53,10 @@ export class Input {
     // pointerdown fires reliably for the right button on mice AND trackpads.
     canvas.addEventListener('pointerdown', (e) => {
       if (!this.locked) return;
-      if (e.button === 0 && this.onBreak) this.onBreak();
-      else if (e.button === 2 && this.onPlace) this.onPlace();
+      this.buttons.add(e.button);
+      if (e.button === 2 && this.onPlace) this.onPlace(); // place is a single edge action
     });
+    canvas.addEventListener('pointerup', (e) => this.buttons.delete(e.button));
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
     addEventListener('keydown', (e) => {
@@ -54,6 +65,9 @@ export class Input {
         const n = +e.code.slice(5) - 1;
         if (n >= 0 && this.onSelect) this.onSelect(n);
       }
+      if ((e.code === 'KeyE') && this.onToggleInv) this.onToggleInv();
+      if (e.code === 'Escape' && this.invOpen && this.onToggleInv) this.onToggleInv();
+      if (e.code === 'KeyP' && this.onPlace) this.onPlace(); // alternate place key
       if (e.code === 'Space') e.preventDefault(); // stop page scroll
     });
     addEventListener('keyup', (e) => this.keys.delete(e.code));

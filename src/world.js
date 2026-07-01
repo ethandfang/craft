@@ -128,17 +128,19 @@ export class World {
   }
 
   meshChunk(ch) {
-    const { opaque, water } = buildChunkGeometry(this, ch);
+    const { opaque, water, cutout } = buildChunkGeometry(this, ch);
     const ox = ch.cx * CHUNK_SIZE, oz = ch.cz * CHUNK_SIZE;
     this.disposeChunk(ch);
     if (opaque) { const m = new THREE.Mesh(opaque, this.materials.opaque); m.position.set(ox, 0, oz); this.scene.add(m); ch.opaqueMesh = m; }
     if (water)  { const m = new THREE.Mesh(water, this.materials.water);   m.position.set(ox, 0, oz); this.scene.add(m); ch.waterMesh = m; }
+    if (cutout) { const m = new THREE.Mesh(cutout, this.materials.cutout); m.position.set(ox, 0, oz); this.scene.add(m); ch.cutoutMesh = m; }
     ch.dirty = false;
   }
 
   disposeChunk(ch) {
     if (ch.opaqueMesh) { this.scene.remove(ch.opaqueMesh); ch.opaqueMesh.geometry.dispose(); ch.opaqueMesh = null; }
     if (ch.waterMesh)  { this.scene.remove(ch.waterMesh);  ch.waterMesh.geometry.dispose();  ch.waterMesh = null; }
+    if (ch.cutoutMesh) { this.scene.remove(ch.cutoutMesh); ch.cutoutMesh.geometry.dispose(); ch.cutoutMesh = null; }
   }
 
   // Synchronously generate a square of chunks — used to prepare spawn so the

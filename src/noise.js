@@ -17,6 +17,9 @@ function mulberry32(seed) {
 const fade = (t) => t * t * t * (t * (t * 6 - 15) + 10);
 const lerp = (a, b, t) => a + t * (b - a);
 
+// 8 gradient directions for 2D Perlin.
+const GRAD2 = [[1,1],[-1,1],[1,-1],[-1,-1],[1,0],[-1,0],[0,1],[0,-1]];
+
 // Classic Perlin gradient hashing.
 function grad(hash, x, y, z) {
   const h = hash & 15;
@@ -57,8 +60,19 @@ export class Noise {
       w);
   }
 
-  // 2D noise via a fixed Z-slice of the 3D field.
-  perlin2(x, y) { return this.perlin3(x, y, 0.5); }
+  // Proper 2D Perlin (full amplitude), normalized to roughly [-1, 1].
+  perlin2(x, y) {
+    const p = this.perm;
+    const X = Math.floor(x) & 255, Y = Math.floor(y) & 255;
+    const xf = x - Math.floor(x), yf = y - Math.floor(y);
+    const u = fade(xf), v = fade(yf);
+    const aa = p[p[X] + Y], ab = p[p[X] + Y + 1];
+    const ba = p[p[X + 1] + Y], bb = p[p[X + 1] + Y + 1];
+    const dot = (h, gx, gy) => { const g = GRAD2[h & 7]; return g[0] * gx + g[1] * gy; };
+    const x1 = lerp(dot(aa, xf, yf),     dot(ba, xf - 1, yf),     u);
+    const x2 = lerp(dot(ab, xf, yf - 1), dot(bb, xf - 1, yf - 1), u);
+    return lerp(x1, x2, v) * 1.4; // scale so extremes approach ±1
+  }
 
   // Fractal Brownian motion — layered octaves for natural-looking terrain.
   fbm2(x, y, { octaves = 4, freq = 1, persistence = 0.5, lacunarity = 2 } = {}) {

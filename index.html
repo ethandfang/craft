@@ -23,17 +23,33 @@
 
   #hotbar {
     position: fixed; left: 50%; bottom: 12px; transform: translateX(-50%);
-    display: flex; gap: 4px; padding: 5px; background: rgba(0,0,0,.35);
+    display: flex; gap: 3px; padding: 4px; background: rgba(0,0,0,.35);
     border-radius: 6px; z-index: 3;
   }
-  .slot {
-    position: relative; width: 46px; height: 46px; border: 2px solid #222;
-    border-radius: 4px; background: #6b6b6b; display: flex; align-items: center; justify-content: center;
-    image-rendering: pixelated;
+  /* Shared slot styling for hotbar + inventory */
+  .iv-slot {
+    width: 44px; height: 44px; box-sizing: border-box;
+    border: 2px solid #2b2b2b; background: #8b8b8b; image-rendering: pixelated;
+    display: block;
   }
-  .slot canvas { width: 36px; height: 36px; image-rendering: pixelated; }
-  .slot .num { position: absolute; top: 1px; left: 3px; color: #fff; font-size: 10px; text-shadow: 0 1px 1px #000; }
-  .slot.sel { border-color: #fff; box-shadow: 0 0 0 2px #000 inset; }
+  .iv-slot.hb { background: rgba(139,139,139,.85); }
+  .iv-slot.sel { border-color: #fff; box-shadow: 0 0 0 2px #000 inset; }
+  .iv-slot.output { border-color: #444; background: #9b9b8b; }
+
+  #inventory {
+    position: fixed; inset: 0; z-index: 6; display: none;
+    flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+    background: rgba(0,0,0,.55); color: #fff; user-select: none;
+  }
+  .iv-title { font-size: 22px; letter-spacing: 1px; margin-bottom: 4px; }
+  .iv-panel-note { opacity: .6; font-size: 12px; }
+  .iv-craftrow { display: flex; align-items: center; gap: 14px; }
+  .iv-arrow { font-size: 28px; opacity: .8; }
+  .iv-grid { display: grid; grid-template-columns: repeat(9, 44px); gap: 3px; }
+  .iv-main { margin-top: 6px; }
+  .iv-hotrow { margin-top: 8px; }
+  #iv-craftgrid { display: grid; gap: 3px; }
+  #iv-cursor { position: fixed; z-index: 8; pointer-events: none; border: none; background: transparent; }
 
   #overlay {
     position: fixed; inset: 0; z-index: 5; display: flex; flex-direction: column;
@@ -59,9 +75,10 @@
   <h1>MINI-CRAFT</h1>
   <p><b>Click to play</b></p>
   <p>WASD move · Shift sprint · Space jump · Mouse look</p>
-  <p>Left-click break · Right-click place</p>
-  <p>1–7 keys or scroll to pick a block · Esc to release mouse</p>
-  <p style="margin-top:10px;opacity:.6">Terrain, caves, water &amp; trees are procedurally generated. Edits auto-save.</p>
+  <p>Hold left-click to mine · Right-click or <b>P</b> to place</p>
+  <p><b>E</b> inventory / crafting · 1–9 or scroll to select · Esc to release mouse</p>
+  <p style="margin-top:10px;opacity:.6">Mine blocks to collect them. Craft planks → sticks → a crafting table → tools.
+  Right-click a placed crafting table to open its 3×3 grid. Everything auto-saves.</p>
 </div>
 
 <script type="module" src="./src/main.js"></script>

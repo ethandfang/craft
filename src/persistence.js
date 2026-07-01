@@ -12,10 +12,14 @@ const SAVE_DELAY = 0.8; // seconds of inactivity before writing
 export class Persistence {
   constructor() {
     this.buckets = new Map(); // "cx,cz" -> Map("wx,wy,wz" -> id)
+    this.inventory = null;    // serialized inventory slots (or null if none saved)
     this._dirty = false;
     this._timer = 0;
     this.load();
   }
+
+  // Store a serialized inventory to be written on the next save tick.
+  recordInventory(arr) { this.inventory = arr; this._dirty = true; this._timer = 0; }
 
   _chunkKey(wx, wz) {
     return Math.floor(wx / CHUNK_SIZE) + ',' + Math.floor(wz / CHUNK_SIZE);
@@ -50,7 +54,7 @@ export class Persistence {
       for (const [k, id] of bucket) o[k] = id;
       out[ck] = o;
     }
-    try { localStorage.setItem(KEY, JSON.stringify({ v: 1, edits: out })); } catch (e) { /* quota */ }
+    try { localStorage.setItem(KEY, JSON.stringify({ v: 1, edits: out, inventory: this.inventory })); } catch (e) { /* quota */ }
     this._dirty = false;
     this._timer = 0;
   }
@@ -60,6 +64,7 @@ export class Persistence {
       const raw = localStorage.getItem(KEY);
       if (!raw) return;
       const data = JSON.parse(raw);
+      if (data.inventory) this.inventory = data.inventory;
       for (const ck in data.edits) {
         const bucket = new Map();
         const o = data.edits[ck];

@@ -29,7 +29,14 @@ export function createEngine(canvas, texture) {
       map: texture, vertexColors: true,
       transparent: true, opacity: 0.72, depthWrite: false,
     }),
+    // Plants: alpha-tested cutout, visible from both sides.
+    cutout: new THREE.MeshBasicMaterial({
+      map: texture, vertexColors: true,
+      alphaTest: 0.5, side: THREE.DoubleSide,
+    }),
   };
+  // We render the world, then the held item on a cleared depth buffer.
+  renderer.autoClear = false;
 
   addEventListener('resize', () => {
     camera.aspect = innerWidth / innerHeight;
