@@ -5,438 +5,65 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Mini-craft</title>
 <style>
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #87ceeb; font-family: monospace; }
-  #c { display: block; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #8fc6ff; font-family: monospace; }
+  #game { display: block; }
+
   #crosshair {
     position: fixed; left: 50%; top: 50%; width: 20px; height: 20px;
-    transform: translate(-50%, -50%); pointer-events: none; opacity: .85;
+    transform: translate(-50%, -50%); pointer-events: none; opacity: .85; z-index: 3;
   }
   #crosshair:before, #crosshair:after { content: ""; position: absolute; background: #fff; box-shadow: 0 0 1px #000; }
   #crosshair:before { left: 9px; top: 0; width: 2px; height: 20px; }
   #crosshair:after  { top: 9px; left: 0; height: 2px; width: 20px; }
-  #hud {
-    position: fixed; left: 50%; bottom: 10px; transform: translateX(-50%);
-    width: 546px; image-rendering: pixelated; pointer-events: none;
+
+  #debug {
+    position: fixed; left: 10px; top: 10px; z-index: 3;
+    color: #fff; font-size: 12px; text-shadow: 0 1px 2px #000; white-space: pre;
   }
-  #info { position: fixed; left: 10px; top: 10px; color: #fff; font-size: 12px; text-shadow: 0 1px 2px #000; line-height: 1.5; }
+
+  #hotbar {
+    position: fixed; left: 50%; bottom: 12px; transform: translateX(-50%);
+    display: flex; gap: 4px; padding: 5px; background: rgba(0,0,0,.35);
+    border-radius: 6px; z-index: 3;
+  }
+  .slot {
+    position: relative; width: 46px; height: 46px; border: 2px solid #222;
+    border-radius: 4px; background: #6b6b6b; display: flex; align-items: center; justify-content: center;
+    image-rendering: pixelated;
+  }
+  .slot canvas { width: 36px; height: 36px; image-rendering: pixelated; }
+  .slot .num { position: absolute; top: 1px; left: 3px; color: #fff; font-size: 10px; text-shadow: 0 1px 1px #000; }
+  .slot.sel { border-color: #fff; box-shadow: 0 0 0 2px #000 inset; }
+
   #overlay {
-    position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
-    background: rgba(0,0,0,.55); color: #fff; flex-direction: column; cursor: pointer; z-index: 5; text-align: center;
+    position: fixed; inset: 0; z-index: 5; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center;
+    background: rgba(0,0,0,.55); color: #fff; cursor: pointer;
   }
-  #overlay h1 { margin: 0 0 8px; font-size: 40px; }
-  #overlay p { margin: 2px; opacity: .85; }
+  #overlay h1 { margin: 0 0 10px; font-size: 42px; letter-spacing: 2px; }
+  #overlay p { margin: 3px; opacity: .85; }
 </style>
+
+<!-- Import map: load Three.js from CDN so bare `import 'three'` works with no build step -->
+<script type="importmap">
+{ "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+</script>
 </head>
 <body>
-<canvas id="c"></canvas>
+<canvas id="game"></canvas>
 <div id="crosshair"></div>
-<div id="info"></div>
-<canvas id="hud" width="364" height="70"></canvas>
+<div id="debug"></div>
+<div id="hotbar"></div>
+
 <div id="overlay">
-  <h1>Mini-craft</h1>
+  <h1>MINI-CRAFT</h1>
   <p><b>Click to play</b></p>
-  <p>WASD move · Space jump · Mouse look</p>
+  <p>WASD move · Shift sprint · Space jump · Mouse look</p>
   <p>Left-click break · Right-click place</p>
-  <p>1–6 or scroll: pick block · Esc to release mouse</p>
-  <p style="margin-top:10px;opacity:.6">Watch the fall — you take damage below 3 blocks.</p>
+  <p>1–7 keys or scroll to pick a block · Esc to release mouse</p>
+  <p style="margin-top:10px;opacity:.6">Terrain, caves, water &amp; trees are procedurally generated. Edits auto-save.</p>
 </div>
 
-<script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
-<script>
-const THREE_OK = typeof THREE !== "undefined";
-const info = document.getElementById("info");
-if (!THREE_OK) info.textContent = "Failed to load three.js (needs internet once to cache the CDN).";
-
-/* ============================================================
-   1. PROCEDURAL TEXTURE ATLAS  (16px tiles, Minecraft-ish look)
-   ============================================================ */
-const TILE = 16, NTILES = 8;
-// tile indices
-const T = { GRASS_TOP:0, GRASS_SIDE:1, DIRT:2, STONE:3, WOOD_TOP:4, WOOD_SIDE:5, LEAVES:6, SAND:7 };
-const atlas = document.createElement("canvas");
-atlas.width = TILE * NTILES; atlas.height = TILE;
-const ax = atlas.getContext("2d");
-
-function rnd() { return Math.random(); }
-function cl(v) { return Math.max(0, Math.min(255, v | 0)); }
-function rgb(r, g, b) { return `rgb(${cl(r)},${cl(g)},${cl(b)})`; }
-function px(ox, x, y, c) { ax.fillStyle = c; ax.fillRect(ox + x, y, 1, 1); }
-function base(ox, r, g, b, d) { // noisy fill
-  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
-    const j = (rnd() * 2 - 1) * d;
-    px(ox, x, y, rgb(r + j, g + j, b + j));
-  }
-}
-function buildAtlas() {
-  base(T.DIRT * 16, 125, 90, 60, 16);
-  base(T.SAND * 16, 224, 211, 160, 14);
-  base(T.STONE * 16, 130, 130, 132, 16);
-  // stone cracks
-  for (let i = 0; i < 10; i++) px(T.STONE * 16, (rnd()*16)|0, (rnd()*16)|0, rgb(95,95,97));
-  // grass top
-  base(T.GRASS_TOP * 16, 96, 158, 56, 20);
-  for (let i = 0; i < 22; i++) px(T.GRASS_TOP * 16, (rnd()*16)|0, (rnd()*16)|0, rgb(70,130,40));
-  // grass side = dirt + green cap with jagged edge
-  base(T.GRASS_SIDE * 16, 125, 90, 60, 16);
-  for (let x = 0; x < 16; x++) {
-    const h = 3 + (rnd() < 0.35 ? 1 : 0);
-    for (let y = 0; y < h; y++) { const j = (rnd()*2-1)*18; px(T.GRASS_SIDE*16, x, y, rgb(90+j,150+j,52+j)); }
-    if (rnd() < 0.3) px(T.GRASS_SIDE*16, x, h, rgb(80,140,46));
-  }
-  // wood side = bark with vertical streaks
-  base(T.WOOD_SIDE * 16, 138, 99, 54, 8);
-  for (let x = 0; x < 16; x++) if (rnd() < 0.45) { const c = rgb(105,72,38); for (let y=0;y<16;y++) if (rnd()<0.7) px(T.WOOD_SIDE*16,x,y,c); }
-  // wood top = rings
-  base(T.WOOD_TOP * 16, 165, 120, 70, 6);
-  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
-    const d = Math.hypot(x - 7.5, y - 7.5);
-    if ((d | 0) % 2 === 0) px(T.WOOD_TOP*16, x, y, rgb(135,95,52));
-  }
-  px(T.WOOD_TOP*16, 7, 7, rgb(110,78,42)); px(T.WOOD_TOP*16, 8, 8, rgb(110,78,42));
-  // leaves
-  base(T.LEAVES * 16, 58, 128, 44, 22);
-  for (let i = 0; i < 40; i++) px(T.LEAVES*16, (rnd()*16)|0, (rnd()*16)|0, rgb(38,95,30));
-  for (let i = 0; i < 14; i++) px(T.LEAVES*16, (rnd()*16)|0, (rnd()*16)|0, rgb(80,160,55));
-}
-
-/* ============================================================
-   2. BLOCKS
-   ============================================================ */
-const BLOCKS = [
-  null,
-  { name: "Grass",  top: T.GRASS_TOP,  side: T.GRASS_SIDE, bottom: T.DIRT },
-  { name: "Dirt",   top: T.DIRT,       side: T.DIRT,       bottom: T.DIRT },
-  { name: "Stone",  top: T.STONE,      side: T.STONE,      bottom: T.STONE },
-  { name: "Wood",   top: T.WOOD_TOP,   side: T.WOOD_SIDE,  bottom: T.WOOD_TOP },
-  { name: "Leaves", top: T.LEAVES,     side: T.LEAVES,     bottom: T.LEAVES },
-  { name: "Sand",   top: T.SAND,       side: T.SAND,       bottom: T.SAND },
-];
-const HOTBAR = [1, 2, 3, 4, 5, 6, 0, 0, 0]; // 9 slots, last 3 empty
-
-/* ============================================================
-   3. WORLD
-   ============================================================ */
-const SIZE = 64, HALF = SIZE / 2, SPAWN_Y = 40;
-const world = new Map();
-const key = (x, y, z) => x + "," + y + "," + z;
-const getBlock = (x, y, z) => world.get(key(x, y, z)) || 0;
-const setBlock = (x, y, z, id) => { if (id) world.set(key(x, y, z), id); else world.delete(key(x, y, z)); };
-
-function hash(x, z) { const h = Math.sin(x * 127.1 + z * 311.7) * 43758.5453; return h - Math.floor(h); }
-function smooth(x, z) {
-  const xi = Math.floor(x), zi = Math.floor(z), xf = x - xi, zf = z - zi;
-  const u = xf*xf*(3-2*xf), v = zf*zf*(3-2*zf);
-  const a = hash(xi,zi), b = hash(xi+1,zi), c = hash(xi,zi+1), d = hash(xi+1,zi+1);
-  return a*(1-u)*(1-v) + b*u*(1-v) + c*(1-u)*v + d*u*v;
-}
-function heightAt(x, z) {
-  let n=0, amp=1, freq=0.04, sum=0;
-  for (let o=0;o<4;o++){ n+=smooth(x*freq,z*freq)*amp; sum+=amp; amp*=0.5; freq*=2; }
-  return Math.floor(8 + (n/sum)*14);
-}
-function generateWorld() {
-  for (let x=-HALF;x<HALF;x++) for (let z=-HALF;z<HALF;z++) {
-    const h = heightAt(x,z);
-    for (let y=0;y<=h;y++) {
-      let id; if (y===h) id = h<=9?6:1; else if (y>=h-3) id=2; else id=3;
-      setBlock(x,y,z,id);
-    }
-  }
-  for (let i=0;i<18;i++) {
-    const x=Math.floor((rnd()-0.5)*(SIZE-8)), z=Math.floor((rnd()-0.5)*(SIZE-8)), h=heightAt(x,z);
-    if (h<=9) continue;
-    const trunk = 4 + (rnd()*2|0);
-    for (let y=1;y<=trunk;y++) setBlock(x,h+y,z,4);
-    const ty=h+trunk;
-    for (let dx=-2;dx<=2;dx++) for (let dz=-2;dz<=2;dz++) for (let dy=0;dy<=2;dy++) {
-      if (Math.abs(dx)+Math.abs(dz)+dy>4) continue;
-      if (dx===0&&dz===0&&dy<2) continue;
-      if (!getBlock(x+dx,ty+dy,z+dz)) setBlock(x+dx,ty+dy,z+dz,5);
-    }
-  }
-}
-
-/* ============================================================
-   4. RENDERER + MESH (face-culled, textured)
-   ============================================================ */
-let renderer, scene, camera, mesh, tex;
-function initThree() {
-  renderer = new THREE.WebGLRenderer({ canvas: document.getElementById("c"), antialias: false });
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-  renderer.setSize(innerWidth, innerHeight);
-  scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x8fc6ff);
-  scene.fog = new THREE.Fog(0x8fc6ff, 45, 95);
-  camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 1000);
-  tex = new THREE.CanvasTexture(atlas);
-  tex.magFilter = THREE.NearestFilter; tex.minFilter = THREE.NearestFilter;
-  tex.generateMipmaps = false; tex.flipY = false;
-  addEventListener("resize", () => {
-    camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
-    renderer.setSize(innerWidth, innerHeight);
-  });
-}
-
-const FACES = [
-  { dir:[ 1,0,0], corners:[[1,0,0],[1,1,0],[1,1,1],[1,0,1]], uv:[[0,1],[0,0],[1,0],[1,1]], shade:0.80 },
-  { dir:[-1,0,0], corners:[[0,0,1],[0,1,1],[0,1,0],[0,0,0]], uv:[[1,1],[1,0],[0,0],[0,1]], shade:0.80 },
-  { dir:[0, 1,0], corners:[[0,1,1],[1,1,1],[1,1,0],[0,1,0]], uv:[[0,1],[1,1],[1,0],[0,0]], shade:1.00, face:"top" },
-  { dir:[0,-1,0], corners:[[0,0,0],[1,0,0],[1,0,1],[0,0,1]], uv:[[0,0],[1,0],[1,1],[0,1]], shade:0.55, face:"bottom" },
-  { dir:[0,0, 1], corners:[[1,0,1],[1,1,1],[0,1,1],[0,0,1]], uv:[[1,1],[1,0],[0,0],[0,1]], shade:0.68 },
-  { dir:[0,0,-1], corners:[[0,0,0],[0,1,0],[1,1,0],[1,0,0]], uv:[[0,1],[0,0],[1,0],[1,1]], shade:0.68 },
-];
-function tileFor(b, f) { return f.face === "top" ? b.top : f.face === "bottom" ? b.bottom : b.side; }
-function buildMesh() {
-  const pos=[], col=[], uvs=[], idx=[]; let v=0;
-  for (const [k, id] of world) {
-    if (!id) continue;
-    const [x,y,z] = k.split(",").map(Number), b = BLOCKS[id];
-    for (const f of FACES) {
-      const [dx,dy,dz] = f.dir;
-      if (getBlock(x+dx,y+dy,z+dz)) continue;
-      const tile = tileFor(b, f), s = f.shade;
-      for (let i=0;i<4;i++) {
-        const c = f.corners[i];
-        pos.push(x+c[0], y+c[1], z+c[2]);
-        col.push(s, s, s);
-        uvs.push((tile + f.uv[i][0]) / NTILES, f.uv[i][1]);
-      }
-      idx.push(v,v+1,v+2, v,v+2,v+3); v += 4;
-    }
-  }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute("position", new THREE.Float32BufferAttribute(pos,3));
-  g.setAttribute("color", new THREE.Float32BufferAttribute(col,3));
-  g.setAttribute("uv", new THREE.Float32BufferAttribute(uvs,2));
-  g.setIndex(idx);
-  if (mesh) { scene.remove(mesh); mesh.geometry.dispose(); }
-  mesh = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ map: tex, vertexColors: true }));
-  scene.add(mesh);
-}
-
-/* ============================================================
-   5. PLAYER + PHYSICS + FALL DAMAGE
-   ============================================================ */
-const player = {
-  pos: new THREE.Vector3(0, SPAWN_Y, 0), vel: new THREE.Vector3(),
-  yaw: 0, pitch: 0, onGround: false, peakY: SPAWN_Y,
-  width: 0.6, height: 1.8, eye: 1.62,
-  health: 20, maxHealth: 20, hunger: 20, maxHunger: 20, hurtFlash: 0,
-};
-const keys = {};
-let selected = 0;
-
-function solidAt(x,y,z){ return getBlock(Math.floor(x),Math.floor(y),Math.floor(z)) !== 0; }
-function collide(axis, dist) {
-  const p = player.pos, w = player.width/2, h = player.height;
-  p[axis] += dist;
-  const minX=Math.floor(p.x-w), maxX=Math.floor(p.x+w);
-  const minY=Math.floor(p.y),   maxY=Math.floor(p.y+h);
-  const minZ=Math.floor(p.z-w), maxZ=Math.floor(p.z+w);
-  for (let x=minX;x<=maxX;x++) for (let y=minY;y<=maxY;y++) for (let z=minZ;z<=maxZ;z++) {
-    if (!solidAt(x,y,z)) continue;
-    if (axis==="x") p.x = dist>0 ? x-w-1e-4 : x+1+w+1e-4;
-    if (axis==="z") p.z = dist>0 ? z-w-1e-4 : z+1+w+1e-4;
-    if (axis==="y") { if (dist>0) p.y=y-h-1e-4; else { p.y=y+1+1e-4; player.onGround=true; } player.vel.y=0; }
-    return;
-  }
-}
-function damage(n) {
-  player.health = Math.max(0, player.health - n);
-  player.hurtFlash = 0.35;
-  if (player.health <= 0) respawn();
-}
-function respawn() {
-  player.pos.set(0, heightAt(0,0)+2, 0); player.vel.set(0,0,0);
-  player.health = player.maxHealth; player.hunger = player.maxHunger; player.peakY = player.pos.y;
-}
-
-function update(dt) {
-  const speed=5.2, sin=Math.sin(player.yaw), cos=Math.cos(player.yaw);
-  let fx=0, fz=0;
-  if (keys["KeyW"]){fx-=sin;fz-=cos;} if (keys["KeyS"]){fx+=sin;fz+=cos;}
-  if (keys["KeyA"]){fx-=cos;fz+=sin;} if (keys["KeyD"]){fx+=cos;fz-=sin;}
-  const len=Math.hypot(fx,fz)||1;
-  player.vel.x=(fx/len)*speed; player.vel.z=(fz/len)*speed;
-  player.vel.y -= 24*dt;
-  if (keys["Space"] && player.onGround){ player.vel.y=8.4; player.onGround=false; }
-
-  const wasGround = player.onGround;
-  player.onGround = false;
-  collide("x", player.vel.x*dt);
-  collide("z", player.vel.z*dt);
-  collide("y", player.vel.y*dt);
-
-  if (player.onGround && !wasGround) {            // just landed -> fall damage
-    const fall = player.peakY - player.pos.y;
-    if (fall > 3) damage(Math.round(fall - 3));
-  }
-  player.peakY = player.onGround ? player.pos.y : Math.max(player.peakY, player.pos.y);
-  if (player.pos.y < -25) { damage(4); respawn(); }
-
-  // light survival loop: hunger drains, regen when fed, starve when empty
-  player.hunger = Math.max(0, player.hunger - dt * (0.05 + (keys["KeyW"]||keys["KeyA"]||keys["KeyS"]||keys["KeyD"] ? 0.05 : 0)));
-  if (player.hunger > 17 && player.health < player.maxHealth) player.health = Math.min(player.maxHealth, player.health + dt*0.6);
-  else if (player.hunger <= 0) player.health = Math.max(0, player.health - dt*0.4);
-  if (player.hurtFlash > 0) player.hurtFlash -= dt;
-
-  camera.position.set(player.pos.x, player.pos.y+player.eye, player.pos.z);
-  const dir = lookDir();
-  camera.lookAt(camera.position.clone().add(dir));
-}
-function lookDir() {
-  return new THREE.Vector3(
-    -Math.sin(player.yaw)*Math.cos(player.pitch),
-     Math.sin(player.pitch),
-    -Math.cos(player.yaw)*Math.cos(player.pitch)).normalize();
-}
-
-/* voxel DDA raycast -> {x,y,z,normal} */
-function raycast(maxDist=6) {
-  const o = camera.position.clone(), d = lookDir();
-  let x=Math.floor(o.x), y=Math.floor(o.y), z=Math.floor(o.z);
-  const step=[Math.sign(d.x),Math.sign(d.y),Math.sign(d.z)];
-  const tDelta=[Math.abs(1/d.x),Math.abs(1/d.y),Math.abs(1/d.z)];
-  const tMax=[
-    d.x>0?(x+1-o.x)/d.x:d.x<0?(o.x-x)/-d.x:Infinity,
-    d.y>0?(y+1-o.y)/d.y:d.y<0?(o.y-y)/-d.y:Infinity,
-    d.z>0?(z+1-o.z)/d.z:d.z<0?(o.z-z)/-d.z:Infinity ];
-  let normal=[0,0,0], t=0;
-  while (t<=maxDist) {
-    if (getBlock(x,y,z)) return {x,y,z,normal};
-    if (tMax[0]<tMax[1] && tMax[0]<tMax[2]){ x+=step[0]; t=tMax[0]; tMax[0]+=tDelta[0]; normal=[-step[0],0,0]; }
-    else if (tMax[1]<tMax[2]){ y+=step[1]; t=tMax[1]; tMax[1]+=tDelta[1]; normal=[0,-step[1],0]; }
-    else { z+=step[2]; t=tMax[2]; tMax[2]+=tDelta[2]; normal=[0,0,-step[2]]; }
-  }
-  return null;
-}
-function breakBlock(){ const h=raycast(); if (h){ setBlock(h.x,h.y,h.z,0); buildMesh(); } }
-function overlapsPlayer(x,y,z){
-  const w=player.width/2, p=player.pos;
-  return (x+1 > p.x-w && x < p.x+w) && (z+1 > p.z-w && z < p.z+w) && (y+1 > p.y && y < p.y+player.height);
-}
-function placeBlock(){
-  const h=raycast(); if (!h) return;
-  const id = HOTBAR[selected]; if (!id) return;             // empty slot -> nothing
-  const x=h.x+h.normal[0], y=h.y+h.normal[1], z=h.z+h.normal[2];
-  if (getBlock(x,y,z)) return;
-  if (overlapsPlayer(x,y,z)) return;                        // don't bury yourself
-  setBlock(x,y,z,id); buildMesh();
-}
-
-/* ============================================================
-   6. HUD (canvas, Minecraft-style hearts / hunger / hotbar)
-   ============================================================ */
-const hud = document.getElementById("hud");
-const hx = hud.getContext("2d");
-hx.imageSmoothingEnabled = false;
-const HEART = ["011000110","111101111","111111111","111111111","011111110","001111100","000111000","000010000"];
-const FOOD  = ["000111000","001111100","011111110","011111110","001111100","000111100","000001110","000000110"];
-function icon(bmp, dx, dy, size, color, halfCols) {
-  const cell = size/9;
-  hx.fillStyle = color;
-  for (let y=0;y<bmp.length;y++) for (let x=0;x<9;x++) {
-    if (bmp[y][x] !== "1") continue;
-    if (halfCols !== undefined && x >= halfCols) continue;
-    hx.fillRect(dx + x*cell, dy + y*cell, Math.ceil(cell), Math.ceil(cell));
-  }
-}
-function drawHUD() {
-  const W = hud.width;
-  hx.clearRect(0,0,W,hud.height);
-  // hearts (top-left)
-  for (let i=0;i<10;i++) {
-    const dx = i*18, dy = 0;
-    icon(HEART, dx, dy, 16, "#3a0d0d");                     // empty outline
-    const v = player.health - i*2;
-    if (v >= 2) icon(HEART, dx, dy, 16, "#e23636");
-    else if (v >= 1) icon(HEART, dx, dy, 16, "#e23636", 5); // half
-  }
-  // hunger (top-right)
-  for (let i=0;i<10;i++) {
-    const dx = W - (i+1)*18, dy = 0;
-    icon(FOOD, dx, dy, 16, "#2b1c0c");
-    const v = player.hunger - i*2;
-    if (v >= 2) icon(FOOD, dx, dy, 16, "#b5651d");
-    else if (v >= 1) icon(FOOD, dx, dy, 16, "#b5651d", 5);
-  }
-  // hotbar (9 slots)
-  const slot = 40, n = 9, total = slot*n, ox = (W-total)/2, oy = 26;
-  hx.fillStyle = "#2c2c2c"; hx.fillRect(ox-3, oy-3, total+6, slot+6);
-  for (let s=0;s<n;s++) {
-    const x = ox + s*slot;
-    hx.fillStyle = "#8b8b8b"; hx.fillRect(x, oy, slot, slot);
-    hx.fillStyle = "#5a5a5a"; hx.fillRect(x, oy, slot, 3); hx.fillRect(x, oy, 3, slot);
-    hx.fillStyle = "#c6c6c6"; hx.fillRect(x+slot-3, oy, 3, slot); hx.fillRect(x, oy+slot-3, slot, 3);
-    const id = HOTBAR[s];
-    if (id) {
-      const b = BLOCKS[id];
-      hx.drawImage(atlas, b.top*16, 0, 16, 16, x+5, oy+5, slot-10, slot-10);
-    }
-  }
-  // selection box
-  const sx = ox + selected*slot;
-  hx.strokeStyle = "#fff"; hx.lineWidth = 3;
-  hx.strokeRect(sx-1, oy-1, slot+2, slot+2);
-}
-
-/* ============================================================
-   7. INPUT
-   ============================================================ */
-const canvas = document.getElementById("c"), overlay = document.getElementById("overlay");
-overlay.addEventListener("click", () => canvas.requestPointerLock());
-document.addEventListener("pointerlockchange", () => {
-  overlay.style.display = document.pointerLockElement === canvas ? "none" : "flex";
-});
-document.addEventListener("mousemove", (e) => {
-  if (document.pointerLockElement !== canvas) return;
-  player.yaw -= e.movementX*0.0025;
-  player.pitch -= e.movementY*0.0025;
-  const lim = Math.PI/2 - 0.01;
-  player.pitch = Math.max(-lim, Math.min(lim, player.pitch));
-});
-// pointerdown is reliable for right-button across mice/trackpads
-canvas.addEventListener("pointerdown", (e) => {
-  if (document.pointerLockElement !== canvas) return;
-  if (e.button === 0) breakBlock();
-  else if (e.button === 2) placeBlock();
-});
-canvas.addEventListener("contextmenu", (e) => e.preventDefault());
-addEventListener("keydown", (e) => {
-  keys[e.code] = true;
-  if (e.code.startsWith("Digit")) { const n=+e.code.slice(5)-1; if (n>=0&&n<9){ selected=n; } }
-  if (e.code === "Space") e.preventDefault();
-});
-addEventListener("keyup", (e) => { keys[e.code] = false; });
-addEventListener("wheel", (e) => { selected = (selected + (e.deltaY>0?1:-1) + 9) % 9; });
-
-/* ============================================================
-   8. LOOP
-   ============================================================ */
-let last = performance.now(), frames=0, fpsT=0, fps=0;
-function loop(now) {
-  const dt = Math.min((now-last)/1000, 0.05); last = now;
-  update(dt);
-  renderer.render(scene, camera);
-  drawHUD();
-  // red hurt vignette
-  if (player.hurtFlash > 0) { hud.style.filter = "none"; document.body.style.boxShadow = "inset 0 0 200px rgba(180,0,0,"+(player.hurtFlash)+")"; }
-  else document.body.style.boxShadow = "none";
-  frames++; fpsT += dt;
-  if (fpsT >= 0.5) { fps = Math.round(frames/fpsT); frames=0; fpsT=0; }
-  info.innerHTML = `Mini-craft<br>FPS ${fps}<br>HP ${player.health.toFixed(0)}/20 · Food ${player.hunger.toFixed(0)}/20<br>XYZ ${player.pos.x.toFixed(0)} ${player.pos.y.toFixed(0)} ${player.pos.z.toFixed(0)}`;
-  requestAnimationFrame(loop);
-}
-
-if (THREE_OK) {
-  buildAtlas();
-  initThree();
-  generateWorld();
-  buildMesh();
-  player.pos.y = heightAt(0,0)+2; player.peakY = player.pos.y;
-  drawHUD();
-  requestAnimationFrame(loop);
-}
-</script>
+<script type="module" src="./src/main.js"></script>
 </body>
 </html>
