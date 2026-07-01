@@ -58,6 +58,35 @@
   }
   #overlay h1 { margin: 0 0 10px; font-size: 42px; letter-spacing: 2px; }
   #overlay p { margin: 3px; opacity: .85; }
+
+  /* survival stats: hearts (left) + hunger (right) above the hotbar */
+  #stats {
+    position: fixed; left: 50%; bottom: 66px; transform: translateX(-50%);
+    width: 420px; height: 18px; z-index: 3; image-rendering: pixelated; pointer-events: none;
+  }
+  /* item name popup above hotbar */
+  #item-name {
+    position: fixed; left: 50%; bottom: 92px; transform: translateX(-50%);
+    color: #fff; font-size: 16px; text-shadow: 0 2px 2px #000; z-index: 3;
+    opacity: 0; transition: opacity .4s; pointer-events: none;
+  }
+  /* underwater blue tint */
+  #water-tint {
+    position: fixed; inset: 0; z-index: 2; pointer-events: none;
+    background: rgba(30, 80, 180, .28);
+  }
+  /* death screen */
+  #death {
+    position: fixed; inset: 0; z-index: 7; display: none; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center;
+    background: rgba(120, 0, 0, .45); color: #fff;
+  }
+  #death h1 { font-size: 48px; margin: 0 0 18px; text-shadow: 0 3px 4px #000; }
+  #respawn {
+    font: inherit; font-size: 18px; padding: 10px 34px; cursor: pointer;
+    background: #6b6b6b; color: #fff; border: 2px solid #2b2b2b;
+  }
+  #respawn:hover { background: #8b8b8b; }
 </style>
 
 <!-- Import map: load Three.js from CDN so bare `import 'three'` works with no build step -->
@@ -69,16 +98,25 @@
 <canvas id="game"></canvas>
 <div id="crosshair"></div>
 <div id="debug"></div>
+<div id="water-tint" style="display:none"></div>
+<canvas id="stats" width="420" height="18"></canvas>
+<div id="item-name"></div>
 <div id="hotbar"></div>
+
+<div id="death">
+  <h1>You died!</h1>
+  <button id="respawn">Respawn</button>
+</div>
 
 <div id="overlay">
   <h1>MINI-CRAFT</h1>
   <p><b>Click to play</b></p>
-  <p>WASD move · Shift sprint · Space jump · Mouse look</p>
-  <p>Hold left-click to mine · Right-click or <b>P</b> to place</p>
-  <p><b>E</b> inventory / crafting · 1–9 or scroll to select · Esc to release mouse</p>
-  <p style="margin-top:10px;opacity:.6">Mine blocks to collect them. Craft planks → sticks → a crafting table → tools.
-  Right-click a placed crafting table to open its 3×3 grid. Everything auto-saves.</p>
+  <p>WASD move · <b>Ctrl</b> or double-tap <b>W</b> sprint · <b>Shift</b> sneak · Space jump / swim</p>
+  <p><b>G</b> toggle Creative/Survival · double-tap <b>Space</b> to fly (creative: Space up, Shift down)</p>
+  <p>Hold left-click to mine (instant in creative) · Right-click or <b>P</b> to place</p>
+  <p><b>E</b> inventory (creative catalog / survival crafting) · 1–9 or scroll to select</p>
+  <p style="margin-top:10px;opacity:.6">Day/night cycle, swimming, fall damage &amp; hunger in survival.
+  Right-click a placed crafting table for the 3×3 grid. Everything auto-saves.</p>
 </div>
 
 <script type="module" src="./src/main.js"></script>

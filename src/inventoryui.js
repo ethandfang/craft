@@ -17,10 +17,13 @@ export class InventoryUI {
     this.craftSize = 2;
     this.output = null;
     this.open = false;
+    this.catalogMode = false;   // creative: pick-any-item catalog instead of crafting
+    this.catalogItems = [];
 
     this.hotbarEls = [];
     this.invEls = [];
     this.craftEls = [];
+    this.catEls = [];
     this._build();
     this._bindMouse();
     this.renderHotbar();
@@ -57,6 +60,13 @@ export class InventoryUI {
     this.outputEl = this._slot('output'); this.outputEl.dataset.area = 'output'; this.outputEl.dataset.index = 0;
     craftRow.append(cgrid, arrow, this.outputEl);
     panel.appendChild(craftRow);
+    this.craftRow = craftRow;
+
+    // creative catalog grid (hidden unless catalogMode)
+    this.catalogEl = document.createElement('div');
+    this.catalogEl.className = 'iv-grid';
+    this.catalogEl.style.display = 'none';
+    panel.appendChild(this.catalogEl);
 
     // main inventory (slots 9..35) then hotbar row (0..8)
     const main = document.createElement('div'); main.className = 'iv-grid iv-main';
@@ -100,6 +110,13 @@ export class InventoryUI {
 
   // ---------- interaction ----------
   _handle(area, index, button) {
+    if (area === 'cat') {
+      // creative catalog: click grabs a full stack (right-click one) onto the cursor
+      const id = this.catalogItems[index];
+      this.cursor = { id, count: button === 2 ? 1 : maxStack(id) };
+      this.renderAll();
+      return;
+    }
     if (area === 'output') { this._takeOutput(); this._afterChange(); return; }
 
     const slot = this._get(area, index);
@@ -152,7 +169,31 @@ export class InventoryUI {
   _afterChange() { this._recompute(); this.renderAll(); }
 
   // ---------- open / close ----------
+  // Creative catalog: every obtainable item, click to take a stack.
+  openCatalog(items, title = 'Creative Inventory') {
+    this.catalogMode = true;
+    this.catalogItems = items;
+    document.getElementById('iv-title').textContent = title;
+    this.craftRow.style.display = 'none';
+    this.catalogEl.style.display = '';
+    if (this.catEls.length !== items.length) {
+      this.catalogEl.innerHTML = '';
+      this.catEls = items.map((_, i) => {
+        const s = this._slot('cat');
+        s.dataset.area = 'cat'; s.dataset.index = i;
+        this.catalogEl.appendChild(s);
+        return s;
+      });
+    }
+    this.open = true;
+    this.panel.style.display = 'flex';
+    this.renderAll();
+  }
+
   openScreen(size, title) {
+    this.catalogMode = false;
+    this.craftRow.style.display = '';
+    this.catalogEl.style.display = 'none';
     this.craftSize = size;
     for (let i = 0; i < 9; i++) this.craft[i] = null;
     document.getElementById('iv-title').textContent = title;
@@ -170,9 +211,14 @@ export class InventoryUI {
   }
 
   closeScreen() {
-    // return crafting items + cursor to the inventory
-    for (let i = 0; i < 9; i++) { const s = this.craft[i]; if (s) { this.inv.add(s.id, s.count); this.craft[i] = null; } }
-    if (this.cursor) { this.inv.add(this.cursor.id, this.cursor.count); this.cursor = null; }
+    if (this.catalogMode) {
+      this.cursor = null;           // creative: leftover cursor items just vanish
+      this.catalogMode = false;
+    } else {
+      // return crafting items + cursor to the inventory
+      for (let i = 0; i < 9; i++) { const s = this.craft[i]; if (s) { this.inv.add(s.id, s.count); this.craft[i] = null; } }
+      if (this.cursor) { this.inv.add(this.cursor.id, this.cursor.count); this.cursor = null; }
+    }
     this.open = false;
     this.panel.style.display = 'none';
     this.cursorEl.style.display = 'none';
@@ -204,8 +250,12 @@ export class InventoryUI {
     this.renderHotbar();
     if (!this.open) return;
     for (let i = 0; i < 36; i++) this._drawSlot(this.invEls[i], this.inv.slots[i]);
-    for (let i = 0; i < 9; i++) this._drawSlot(this.craftEls[i], this.craft[i]);
-    this._drawSlot(this.outputEl, this.output);
+    if (this.catalogMode) {
+      this.catEls.forEach((el, i) => this._drawSlot(el, { id: this.catalogItems[i], count: 1 }));
+    } else {
+      for (let i = 0; i < 9; i++) this._drawSlot(this.craftEls[i], this.craft[i]);
+      this._drawSlot(this.outputEl, this.output);
+    }
     if (this.cursor) { this.cursorEl.style.display = ''; this._drawSlot(this.cursorEl, this.cursor); }
     else this.cursorEl.style.display = 'none';
   }

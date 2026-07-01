@@ -36,6 +36,7 @@ export class Sound {
   }
 
   dig()   { this._noise(0.08, 220 + Math.random() * 80, 0.25); }
+  hurt()  { this._blip(95, 0.18, 'sawtooth'); }
   break() { this._noise(0.16, 180 + Math.random() * 60, 0.4); }
   place() { this._blip(160 + Math.random() * 40, 0.09); }
   step()  { this._noise(0.05, 120 + Math.random() * 40, 0.12); }

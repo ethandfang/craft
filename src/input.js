@@ -19,6 +19,11 @@ export class Input {
     this.onScroll = null;  // (dir: -1 | +1)
     this.onGesture = null; // () — first interaction (used to unlock audio)
     this.onToggleInv = null; // () — E / Esc
+    this.onToggleFly = null; // () — double-tap Space
+    this.onToggleMode = null; // () — G key (creative <-> survival)
+    this._lastSpace = 0;
+    this._lastW = 0;
+    this.sprintLatch = false; // set by double-tap W, cleared on W release
 
     this._bind();
   }
@@ -68,9 +73,23 @@ export class Input {
       if ((e.code === 'KeyE') && this.onToggleInv) this.onToggleInv();
       if (e.code === 'Escape' && this.invOpen && this.onToggleInv) this.onToggleInv();
       if (e.code === 'KeyP' && this.onPlace) this.onPlace(); // alternate place key
+      if (e.code === 'KeyG' && !e.repeat && this.onToggleMode) this.onToggleMode();
+      if (e.code === 'Space' && !e.repeat) {                 // double-tap -> toggle fly
+        const t = performance.now();
+        if (t - this._lastSpace < 300 && this.onToggleFly) this.onToggleFly();
+        this._lastSpace = t;
+      }
+      if (e.code === 'KeyW' && !e.repeat) {                  // double-tap W -> sprint
+        const t = performance.now();
+        if (t - this._lastW < 300) this.sprintLatch = true;
+        this._lastW = t;
+      }
       if (e.code === 'Space') e.preventDefault(); // stop page scroll
     });
-    addEventListener('keyup', (e) => this.keys.delete(e.code));
+    addEventListener('keyup', (e) => {
+      this.keys.delete(e.code);
+      if (e.code === 'KeyW') this.sprintLatch = false;
+    });
 
     addEventListener('wheel', (e) => {
       if (this.onScroll) this.onScroll(e.deltaY > 0 ? 1 : -1);
